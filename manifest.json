@@ -1,7 +1,7 @@
 {
 	"id": "week-grid-planner",
 	"name": "Week Grid Planner",
-	"version": "0.3.27",
+	"version": "0.3.28",
 	"minAppVersion": "1.13.0",
 	"description": "Local-first weekly planner, as a custom Bases view.",
 	"author": "Paulo",

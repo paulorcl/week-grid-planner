@@ -90,6 +90,10 @@ export class WeekGridView extends BasesView {
 	private skipAnimationUntil = 0;
 	/** File path of the card currently being dragged, if any — tracked in memory rather than read from dataTransfer, since dataTransfer.getData() isn't reliably readable during dragover in most browsers (only dragstart/drop). */
 	private draggedPath: string | null = null;
+	/** Pending post-drop safety re-render (see scheduleStuckRenderFallback). */
+	private stuckRenderTimer: number | null = null;
+	/** Counts drags started, so the fallback above can tell "the drag I was scheduled for" from "a newer one". */
+	private dragSeq = 0;
 	/** True once a drop handler has started actually moving the dragged card — dragend fires immediately after drop, before the async file update resolves. Guards the cancelled-drag cleanup in dragend: a successful drop deliberately leaves the placeholder and the hidden original card exactly as the live preview left them (see the drop handlers), so dragend must not touch either in that case — only a genuinely cancelled drag needs dragend to restore them itself. */
 	private dropHandled = false;
 	/** Reused across drags — a dashed "landing zone" box shown at wherever the dragged card would land if dropped right now. */
@@ -294,7 +298,19 @@ export class WeekGridView extends BasesView {
 	 * essentially never actually do anything.
 	 */
 	private scheduleStuckRenderFallback() {
-		window.setTimeout(() => {
+		if (this.stuckRenderTimer !== null) window.clearTimeout(this.stuckRenderTimer);
+		const scheduledAtDrag = this.dragSeq;
+		this.stuckRenderTimer = window.setTimeout(() => {
+			this.stuckRenderTimer = null;
+			// A *newer* drag started (it can begin within 2 s of the last drop) and is still
+			// going: its placeholder is meant to be in the DOM, and re-rendering now would rebuild
+			// the card being dragged — un-hiding it, shifting the list and skewing the drop index.
+			// (Comparing drag numbers, not just draggedPath, keeps the rescue working if the drag
+			// this timer belongs to never delivered its dragend.)
+			if (this.draggedPath !== null && this.dragSeq !== scheduledAtDrag) {
+				dbg("stuck-render fallback skipped: a new drag is in progress"); // DRAGDEBUG
+				return;
+			}
 			dbg("stuck-render fallback fired", { placeholderConnected: !!this.placeholderEl?.isConnected }); // DRAGDEBUG
 			if (this.placeholderEl?.isConnected) void this.render();
 		}, 2000);
@@ -326,7 +342,7 @@ export class WeekGridView extends BasesView {
 
 		if (placeholder.parentElement !== listEl || placeholder.nextElementSibling !== referenceEl) {
 			listEl.insertBefore(placeholder, referenceEl);
-			dbg("placeholder moved", { list: listLabel(listEl), before: referenceEl ? cardLabel(referenceEl) : "(end of list)" }); // DRAGDEBUG
+			dbg("placeholder moved", { list: listLabel(listEl), before: referenceEl ? cardLabel(referenceEl) : "(end of list)", y: Math.round(clientY), refMid: referenceEl ? Math.round(referenceEl.getBoundingClientRect().top + referenceEl.getBoundingClientRect().height / 2) : null }); // DRAGDEBUG
 		}
 	}
 
@@ -348,7 +364,7 @@ export class WeekGridView extends BasesView {
 	private async render() {
 		const dbgId = nextRenderId(); // DRAGDEBUG
 		const firstRects = this.shouldAnimateNextRender() ? this.captureCardRects() : null;
-		dbg("render start", { id: dbgId, animate: firstRects !== null, skipWindowActive: Date.now() < this.skipAnimationUntil }); // DRAGDEBUG
+		dbg("render start", { id: dbgId, animate: firstRects !== null, skipWindowActive: Date.now() < this.skipAnimationUntil, dragInProgress: this.draggedPath !== null }); // DRAGDEBUG
 
 		this.rootEl.toggleClass("wgp-text-wrap", this.plugin.settings.cardTextOverflow === "wrap");
 		this.rootEl.style.setProperty("--wgp-side-border-width", `${this.plugin.settings.sideBorderThickness}px`);
@@ -559,6 +575,7 @@ export class WeekGridView extends BasesView {
 		cardEl.addEventListener("dragstart", (ev) => {
 			ev.dataTransfer?.setData("text/plain", file.path);
 			this.draggedPath = file.path;
+			this.dragSeq++;
 			this.dropHandled = false;
 			dbg("dragstart", { card: cardLabel(cardEl), list: isoDate ?? "someday", index }); // DRAGDEBUG
 			// Deferred a frame: the browser captures its native drag-ghost

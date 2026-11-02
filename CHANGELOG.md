@@ -2,6 +2,12 @@
 
 Todas as mudanças notáveis do Week Grid Planner são registradas aqui.
 
+## [0.3.28]
+### Fixed
+- A stale safety timer from the previous drop could fire in the middle of the *next* drag when that drag started within 2 s of the drop (found with the drag debug log: it happened in 4 of 5 quick successive drags). The timer forced a re-render while a card was being held, so the list jumped by one card height, the card being dragged reappeared in its old slot, and — because the drop index counts visible cards — the drop position could end up off by one. The timer is now skipped when a newer drag is in progress (it still runs normally if the drag that scheduled it never delivered `dragend`), and timers no longer stack
+### Changed
+- Temporary drag debug log: keeps 1500 lines instead of 500, records the cursor's Y position and the target card's midpoint on every placeholder move, and flags renders and board snapshots that happen while a drag is in progress (`dragInProgress`)
+
 ## [0.3.27]
 ### Added
 - **Temporary, development-only** drag-and-drop trace, to debug small glitches in the drag animation without having to describe them. Not a feature and not meant to ship: it only observes and changes no dragging behavior. It records (in memory, only during a drag and for a few seconds after) the drag events, placeholder moves, the order/date writes, every render and FLIP step with timings, and two board-state snapshots after a drop (stuck placeholder, hidden or duplicated cards, leftover inline animation styles). It is saved to `drag-debug.log` in the plugin folder (one write per drag) and can be copied with the command "Copy drag debug log (temporary)". To remove it: delete `src/drag-debug.ts` and every line tagged `DRAGDEBUG` (`grep -rn DRAGDEBUG src`)

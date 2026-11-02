@@ -14,7 +14,7 @@
  */
 import { apiVersion, App, Notice, Platform } from "obsidian";
 
-const MAX_EVENTS = 500;
+const MAX_EVENTS = 1500;
 const FLUSH_DELAY_MS = 3000;
 /** How long after dragend events are still recorded (covers the +2.5 s state snapshot). */
 const POST_DRAG_WINDOW_MS = 7000;
@@ -87,6 +87,7 @@ export function dragDebugSnapshot(label: string, rootEl: HTMLElement, placeholde
 	dbg(label, {
 		cards: cards.length,
 		duplicatePaths: duplicates,
+		dragInProgress: dragging, // true = this snapshot (a leftover timer from the previous drop) landed inside a NEW drag
 		placeholderConnected: !!placeholderEl?.isConnected,
 		placeholdersInDom: rootEl.querySelectorAll(".wgp-card-placeholder").length,
 		hiddenCards: cards.filter((c) => c.style.display === "none").map(cardLabel),
