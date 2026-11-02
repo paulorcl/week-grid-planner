@@ -1,0 +1,2 @@
+# Keep line endings as LF everywhere (Windows and Linux), so diffs stay clean
+* text=auto eol=lf

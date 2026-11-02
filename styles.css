@@ -1,0 +1,445 @@
+.wgp-root {
+	padding: 8px 4px;
+	font-size: var(--font-ui-small);
+}
+
+/* Header */
+.wgp-header {
+	display: flex;
+	align-items: center;
+	margin-bottom: 12px;
+}
+
+.wgp-nav {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/*
+ * ".clickable-icon" is Obsidian's own class, added here to stop its core
+ * button:not(.clickable-icon) rule (a themed box-shadow made to look like
+ * a border, higher specificity than a plain class) from applying — see the
+ * identical fix for .wgp-card-move/.wgp-card-complete below. The compound
+ * selector keeps our own look reliably more specific than clickable-icon's
+ * own built-in (borderless) style.
+ */
+.wgp-nav-button.clickable-icon {
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	box-shadow: none;
+	color: var(--text-normal);
+	cursor: pointer;
+	padding: 4px 10px;
+}
+
+.wgp-nav-button.clickable-icon:hover {
+	background: var(--background-modifier-hover);
+}
+
+.wgp-week-label {
+	font-weight: 600;
+	margin: 0 4px;
+	min-width: 190px;
+	text-align: center;
+}
+
+.wgp-today-button {
+	color: var(--interactive-accent);
+}
+
+.wgp-today-button.is-hidden {
+	visibility: hidden;
+}
+
+/* Column grid */
+.wgp-columns {
+	display: grid;
+	grid-template-columns: repeat(6, minmax(0, 1fr));
+	gap: 6px;
+}
+
+/* Mobile: one column at a time, stacked vertically. */
+@media (max-width: 640px) {
+	.wgp-columns {
+		grid-template-columns: 1fr;
+	}
+
+	.wgp-column-weekend {
+		flex-direction: column;
+	}
+}
+
+.wgp-column {
+	background: var(--wgp-column-bg, var(--background-secondary));
+	border-radius: var(--radius-m);
+	display: flex;
+	flex-direction: column;
+	min-height: 240px;
+	padding: 6px;
+}
+
+.wgp-column-today {
+	background: var(--background-modifier-active-hover);
+	outline: 1px solid var(--interactive-accent);
+}
+
+.wgp-column-weekend {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.wgp-column-compact {
+	min-height: 117px;
+}
+
+.wgp-column-header {
+	display: flex;
+	justify-content: space-between;
+	font-size: var(--font-ui-medium);
+	margin-bottom: 6px;
+	padding: 2px 4px;
+}
+
+.wgp-column-day {
+	color: var(--text-normal);
+	font-weight: 700;
+}
+
+.wgp-column-date {
+	color: var(--text-muted);
+	font-weight: 600;
+}
+
+.wgp-column-list {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 4px;
+	min-height: 32px;
+}
+
+/* Live "landing zone" shown while dragging a card — see
+   updatePlaceholderPosition() in view.ts. Sized to roughly match a card so
+   the gap reads as "this is where it'll land", not just an empty sliver. */
+.wgp-card-placeholder {
+	border: 1.5px dashed var(--interactive-accent);
+	border-radius: var(--radius-s);
+	box-sizing: border-box;
+	flex-shrink: 0;
+	min-height: 38px;
+}
+
+.wgp-column-add {
+	align-items: center;
+	border-radius: var(--radius-s);
+	color: var(--text-faint);
+	cursor: pointer;
+	display: flex;
+	flex-shrink: 0;
+	height: 20px;
+	justify-content: center;
+	margin-top: 4px;
+}
+
+.wgp-column-add:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+}
+
+/* Task cards */
+.wgp-card {
+	--wgp-color: var(--interactive-accent);
+	align-items: center;
+	background: var(--background-primary);
+	border-radius: var(--radius-s);
+	cursor: grab;
+	display: flex;
+	gap: 4px;
+	/* Matches the complete/options buttons' own height (30px) plus this
+	   padding (4px top/bottom = 38px total) — same proportions the card
+	   had before 0.3.x. Needed so the row keeps a consistent height
+	   whether or not those buttons are currently shown — display: none
+	   removes their own height contribution when hidden (see
+	   .wgp-card-move/.wgp-card-complete). */
+	min-height: 38px;
+	padding: 4px 6px;
+}
+
+/*
+ * "tweek" (colored pill around just the text) and "fill" (whole card
+ * background) only apply a color when the task actually has one —
+ * .wgp-has-color is toggled in TypeScript based on whether resolveColor()
+ * found anything (see view.ts). Without it, every colorless task would
+ * default to --wgp-color's fallback (--interactive-accent, set on .wgp-card
+ * below), which isn't what "no color set" should look like in these two
+ * modes. "side-border" keeps that accent-colored default on purpose — a
+ * thin default border reads as neutral in a way a full colored fill or
+ * pill doesn't.
+ */
+.wgp-color-side-border {
+	border-left: var(--wgp-side-border-width, 3px) solid var(--wgp-color);
+}
+
+.wgp-color-fill.wgp-has-color {
+	background: var(--wgp-color);
+}
+
+/* --wgp-color-text is computed per-card in TypeScript (see color-utils.ts)
+   — a simple contrast check so the text stays readable regardless of how
+   light or dark the task's color is. */
+.wgp-color-fill.wgp-has-color .wgp-card-content {
+	color: var(--wgp-color-text, inherit);
+}
+
+/* The body icon defaults to a fixed faint color (see .wgp-card-body-icon
+   further down) — overridden here so it matches the contrast-safe text
+   color above instead, same as the equivalent tweek rule does. */
+.wgp-color-fill.wgp-has-color .wgp-card-body-icon {
+	color: inherit;
+}
+
+/* Same contrast fix, extended to the move/complete buttons — fill mode
+   colors the whole card, so their default muted color can end up just as
+   low-contrast as the task text would without --wgp-color-text. Not
+   needed for side-border (card background never changes) or tweek (only
+   the text pill is colored, not the card). */
+.wgp-color-fill.wgp-has-color .wgp-card-move.clickable-icon,
+.wgp-color-fill.wgp-has-color .wgp-card-complete.clickable-icon {
+	color: var(--wgp-color-text, inherit);
+}
+
+/* Dims a done/cancelled task's fill rather than leaving it full-strength —
+   opacity on the whole card, since fill mode colors the whole card, not
+   just a pill (compare the equivalent tweek rule below). Only applies with
+   an actual color set; a colorless done/cancelled task falls through to
+   the plain .wgp-card-done/.wgp-card-cancelled-* rules everyone else uses. */
+.wgp-color-fill.wgp-has-color.wgp-card-done,
+.wgp-color-fill.wgp-has-color.wgp-card-cancelled-strike,
+.wgp-color-fill.wgp-has-color.wgp-card-cancelled-red {
+	opacity: 0.25;
+}
+
+.wgp-color-fill.wgp-has-color.wgp-card-done .wgp-card-text {
+	color: var(--wgp-color-text, inherit);
+}
+
+.wgp-color-tweek .wgp-card-content {
+	border-radius: 10px;
+	/* Overrides the base flex: 1 — a chip should hug its own content (icon
+	   + text), not stretch to fill the row like the other modes' card
+	   backgrounds do. margin-right: auto then eats the leftover space
+	   instead, so the move/complete buttons still end up flush against the
+	   card's right edge rather than sitting right after the (possibly
+	   short) pill. */
+	flex: 0 1 auto;
+	line-height: 20px;
+	margin-right: auto;
+	max-width: 100%;
+	padding: 0 8px;
+}
+
+.wgp-color-tweek.wgp-has-color .wgp-card-content {
+	background: var(--wgp-color);
+	color: var(--wgp-color-text, inherit);
+}
+
+/* The body icon defaults to a fixed faint color (see .wgp-card-body-icon
+   below) — overridden here so it matches the pill's own contrast-safe
+   text color instead, the same one .wgp-card-text already uses. */
+.wgp-color-tweek.wgp-has-color .wgp-card-body-icon {
+	color: inherit;
+}
+
+/* Tweek itself fades a completed/cancelled task's pill rather than
+   replacing its color outright — opacity on the whole pill dims both the
+   background and its (already contrast-matched) text/icon together in one
+   step. Only applies with an actual color set; a colorless task has no
+   pill to fade, so it falls through to the plain .wgp-card-done/
+   .wgp-card-cancelled-* rules below unaffected. */
+.wgp-color-tweek.wgp-has-color.wgp-card-done .wgp-card-content,
+.wgp-color-tweek.wgp-has-color.wgp-card-cancelled-strike .wgp-card-content,
+.wgp-color-tweek.wgp-has-color.wgp-card-cancelled-red .wgp-card-content {
+	opacity: 0.25;
+}
+
+.wgp-color-tweek.wgp-has-color.wgp-card-done .wgp-card-text {
+	color: var(--wgp-color-text, inherit);
+}
+
+.wgp-card:active {
+	cursor: grabbing;
+}
+
+.wgp-card-content {
+	align-items: center;
+	cursor: pointer;
+	display: flex;
+	flex: 1;
+	gap: 4px;
+	min-width: 0;
+}
+
+.wgp-card-text {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Applied to .wgp-root when settings.cardTextOverflow === "wrap". */
+.wgp-text-wrap .wgp-card-text {
+	overflow: visible;
+	text-overflow: unset;
+	white-space: normal;
+	word-break: break-word;
+}
+
+.wgp-card-done .wgp-card-text {
+	color: var(--text-faint);
+	text-decoration: line-through;
+}
+
+.wgp-card-cancelled-strike .wgp-card-text {
+	text-decoration: line-through;
+}
+
+.wgp-card-cancelled-red .wgp-card-text {
+	color: var(--text-error);
+}
+
+.wgp-card-body-icon {
+	color: var(--text-faint);
+	display: flex;
+	flex-shrink: 0;
+}
+
+.wgp-card-body-icon svg {
+	height: 12px;
+	width: 12px;
+}
+
+/*
+ * These also carry Obsidian's own "clickable-icon" class (added in
+ * view.ts), specifically to stop button:not(.clickable-icon) — a core
+ * Obsidian rule that puts a border-like box-shadow on every plain <button>
+ * — from matching at all. Every selector below repeats ".clickable-icon"
+ * to stay more specific than clickable-icon's own built-in styles, so our
+ * sizing/behavior always wins instead of depending on cascade order.
+ */
+.wgp-card-move.clickable-icon,
+.wgp-card-complete.clickable-icon {
+	align-items: center;
+	appearance: none;
+	-webkit-appearance: none;
+	-webkit-tap-highlight-color: transparent;
+	background: transparent;
+	border: none;
+	border-radius: var(--radius-s);
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	display: none;
+	flex-shrink: 0;
+	font-size: var(--icon-size, 16px);
+	height: 30px;
+	justify-content: center;
+	line-height: 1;
+	outline: none;
+	padding: 0;
+	width: 30px;
+}
+
+/* Thinner than the complete button on purpose — "⋮" is a narrow glyph, so
+   the same 30px width as "✓" left a lot of empty hover-fill space on
+   either side of it. */
+.wgp-card-move.clickable-icon {
+	width: 20px;
+}
+
+.wgp-card:hover .wgp-card-move.clickable-icon,
+.wgp-card:hover .wgp-card-complete.clickable-icon {
+	display: flex;
+}
+
+/* Touch has no persistent hover — without this, the buttons would never show up. */
+@media (hover: none), (pointer: coarse) {
+	.wgp-card-move.clickable-icon,
+	.wgp-card-complete.clickable-icon {
+		display: flex;
+	}
+}
+
+.wgp-card-move.clickable-icon:hover,
+.wgp-card-complete.clickable-icon:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.wgp-card-move.clickable-icon:focus,
+.wgp-card-move.clickable-icon:focus-visible,
+.wgp-card-complete.clickable-icon:focus,
+.wgp-card-complete.clickable-icon:focus-visible {
+	box-shadow: none;
+	outline: none;
+}
+
+.wgp-card-complete.clickable-icon:hover {
+	color: var(--text-success);
+}
+
+.wgp-input-inline {
+	background: var(--background-primary);
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-s);
+	padding: 4px 6px;
+	width: 100%;
+}
+
+/* Someday */
+.wgp-someday {
+	background: var(--wgp-column-bg, var(--background-primary-alt));
+	border-radius: var(--radius-m);
+	margin-top: 10px;
+	padding: 6px;
+}
+
+.wgp-someday-title {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	margin-bottom: 6px;
+	padding: 2px 4px;
+}
+
+.wgp-someday-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-height: 32px;
+}
+
+/* Never rendered — only exists so ColorResolver (color-utils.ts) can read
+   getComputedStyle() on it to canonicalize/compare colors under the live
+   theme. display: none is fine here: it stops painting, not style
+   computation or inheritance, so var(--interactive-accent) etc. still
+   resolve correctly. It does need to stay attached to the real DOM (a
+   child of .wgp-root), since inherited custom properties only resolve
+   through an actual DOM ancestor chain. */
+.wgp-color-probe {
+	display: none;
+}
+
+/* Small color preview next to each entry in the color palette modal. */
+.wgp-color-swatch {
+	border-radius: var(--radius-s);
+	display: inline-block;
+	height: 14px;
+	margin-right: 6px;
+	vertical-align: middle;
+	width: 14px;
+}
+

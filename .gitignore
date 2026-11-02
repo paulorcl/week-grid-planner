@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output — shipped as GitHub release assets, not committed
+main.js
+
+# Local files that appear when the repo folder is used as a vault plugin folder
+data.json
+drag-debug.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
