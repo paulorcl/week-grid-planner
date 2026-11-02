@@ -1,10 +1,18 @@
 # Week Grid Planner
 
+> [!WARNING]
+> ## ⚠️ This plugin was made with AI ("vibe coded") and is mainly for personal use
+>
+> The code was written with an AI assistant (Claude, by Anthropic), not by hand, and the project exists to fit **its author's own workflow**. It is shared as-is, with no promise of support, fixes or feature requests.
+>
+> - **Treat it as experimental.** It may contain bugs, and it creates, renames, rewrites and deletes notes in your vault, so **keep backups** before trying it.
+> - Expect rough edges and breaking changes until 1.0.
+> - It is used daily by its author on desktop and Android, but that is the extent of the testing.
+> - Use it at your own risk (see the [license](LICENSE)).
+
 A local-first weekly planner for [Obsidian](https://obsidian.md). It adds a **Bases view** that shows your tasks as a 7-day grid (Monday to Friday, with Saturday and Sunday sharing the sixth column) with a **Someday** backlog underneath. Every task is an ordinary note in your vault, and recurring tasks are generated from "master" notes with an RRULE.
 
 Inspired by the Tweek planner app. Not affiliated with it.
-
-> **Early-stage personal project.** It is used daily on desktop and Android by its author, but expect rough edges and breaking changes until 1.0.
 
 ## Requirements
 
