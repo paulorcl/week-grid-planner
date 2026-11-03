@@ -483,6 +483,15 @@ export class WeekGridView extends BasesView {
 		// on cursor Y, but the hit area stays the full column so dropping
 		// near the header or the "+" strip still works, matching the
 		// original behavior.
+		// Also accept the drag when it *enters* an element, not only on dragover. Browsers decide
+		// whether a drop is allowed from the last dragenter/dragover that was cancelled, and when the
+		// pointer crosses into a new element dragenter fires first, with dragover following on the
+		// next update. Releasing inside that gap (a fast drag-and-drop) used to deliver no drop at
+		// all, so the card snapped back to where it was.
+		columnEl.addEventListener("dragenter", (ev) => {
+			if (!this.draggedPath) return;
+			ev.preventDefault();
+		});
 		columnEl.addEventListener("dragover", (ev) => {
 			if (!this.draggedPath) return;
 			ev.preventDefault();
@@ -937,6 +946,11 @@ export class WeekGridView extends BasesView {
 			}
 		});
 
+		// (Same dragenter rule as for the day columns — see there.)
+		listEl.addEventListener("dragenter", (ev) => {
+			if (!this.draggedPath) return;
+			ev.preventDefault();
+		});
 		listEl.addEventListener("dragover", (ev) => {
 			if (!this.draggedPath) return;
 			ev.preventDefault();

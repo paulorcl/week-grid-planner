@@ -66,7 +66,7 @@ export default class WeekGridPlannerPlugin extends Plugin {
 	async onload() {
 		addIcon(BODY_ICON_ID, BODY_ICON_SVG);
 		await this.loadSettings();
-		dragDebugInit(this.app, this.manifest.dir, this.manifest.version); // DRAGDEBUG
+		dragDebugInit(this, this.manifest.dir, this.manifest.version); // DRAGDEBUG
 		this.addSettingTab(new WeekGridPlannerSettingTab(this.app, this));
 
 		const registered = this.registerBasesView(WEEK_GRID_VIEW_TYPE, {

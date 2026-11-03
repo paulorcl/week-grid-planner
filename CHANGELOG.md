@@ -2,6 +2,12 @@
 
 Todas as mudanças notáveis do Week Grid Planner são registradas aqui.
 
+## [0.3.29]
+### Fixed
+- Fast drag-and-drop sometimes did nothing: the card snapped back to where it was. The drag log showed that in quick drags (about 50-100 ms from pick-up to release) the browser delivered **no `drop` event at all**, even though the pointer was released inside the list (10 of 11 quick drags in one capture; slower drags were fine). Day columns and the Someday list now also accept the drag on `dragenter`, not only on `dragover`, as the HTML drag-and-drop model expects. Likely cause: when the pointer crosses into a new element, `dragenter` fires first and `dragover` only on the next update, so releasing in between counted as "drop not allowed"
+### Changed
+- Temporary drag debug log: now records every `dragenter` (and whether it was accepted), any `dragover` that was not accepted, and the drop effect, pointer position and element under the pointer at `dragend`, to confirm the fix above
+
 ## [0.3.28]
 ### Fixed
 - A stale safety timer from the previous drop could fire in the middle of the *next* drag when that drag started within 2 s of the drop (found with the drag debug log: it happened in 4 of 5 quick successive drags). The timer forced a re-render while a card was being held, so the list jumped by one card height, the card being dragged reappeared in its old slot, and — because the drop index counts visible cards — the drop position could end up off by one. The timer is now skipped when a newer drag is in progress (it still runs normally if the drag that scheduled it never delivered `dragend`), and timers no longer stack

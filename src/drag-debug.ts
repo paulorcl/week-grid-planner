@@ -12,7 +12,7 @@
  * seconds after the last event (one write per drag, never per event), and the
  * "Copy drag debug log (temporary)" command puts it on the clipboard.
  */
-import { apiVersion, App, Notice, Platform } from "obsidian";
+import { apiVersion, App, Notice, Platform, Plugin } from "obsidian";
 
 const MAX_EVENTS = 1500;
 const FLUSH_DELAY_MS = 3000;
@@ -29,8 +29,32 @@ let activeUntil = 0;
 let renderSeq = 0;
 let flushTimer: number | undefined;
 
-export function dragDebugInit(app: App, pluginDir: string | undefined, pluginVersion: string): void {
-	appRef = app;
+/** Short description of a DOM node for the log, e.g. "div.wgp-card". */
+function elLabel(node: EventTarget | Element | null): string {
+	if (!(node instanceof Element)) return "?";
+	const classes = typeof node.className === "string" ? node.className.split(/\s+/).filter(Boolean).slice(0, 2) : [];
+	return node.tagName.toLowerCase() + (classes.length ? "." + classes.join(".") : "");
+}
+
+export function dragDebugInit(plugin: Plugin, pluginDir: string | undefined, pluginVersion: string): void {
+	appRef = plugin.app;
+
+	// Window-level, bubble-phase listeners: they run after the view's own handlers, so
+	// `defaultPrevented` tells us whether the drag was accepted (the thing that decides if a drop happens).
+	plugin.registerDomEvent(window, "dragenter", (ev) => {
+		dbg("dragenter", { into: elLabel(ev.target), accepted: ev.defaultPrevented });
+	});
+	plugin.registerDomEvent(window, "dragover", (ev) => {
+		if (!ev.defaultPrevented) dbg("dragover NOT accepted", { over: elLabel(ev.target) });
+	});
+	plugin.registerDomEvent(window, "dragend", (ev) => {
+		dbg("dragend (window)", {
+			dropEffect: ev.dataTransfer?.dropEffect,
+			x: Math.round(ev.clientX),
+			y: Math.round(ev.clientY),
+			under: elLabel(document.elementFromPoint(ev.clientX, ev.clientY)),
+		});
+	});
 	logPath = pluginDir ? `${pluginDir}/drag-debug.log` : "";
 	header = `Week Grid Planner drag debug log — plugin ${pluginVersion}, Obsidian API ${apiVersion}, ${
 		Platform.isMobile ? "mobile" : "desktop"
