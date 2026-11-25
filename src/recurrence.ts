@@ -188,7 +188,9 @@ async function readExistingSlots(app: App, tasksFolder: string, fieldNames: Fiel
 function buildOccurrenceContent(master: MasterNote, isoDate: string, fieldNames: FieldNameMap): string {
 	const lines = [
 		"---",
-		`${fieldNames.master_id}: ${master.master_id}`,
+		// Always a quoted string: unquoted, a value like 007123, 1e5, true or "a: b" is read back
+		// as a number / boolean / broken YAML, and the occurrence would no longer match its master.
+		`${fieldNames.master_id}: ${JSON.stringify(String(master.master_id))}`,
 		`${fieldNames.date}: ${isoDate}`,
 		`${fieldNames.original_date}: ${isoDate}`,
 		`${fieldNames.status}: ${STATUS_PENDING}`,

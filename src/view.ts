@@ -17,6 +17,7 @@ import { ColorResolver, resolveColor } from "./color-utils";
 import { ConfirmModal } from "./confirm-modal";
 import { t } from "./i18n";
 import { writeLog } from "./logger";
+import { insertPaths, rangeBetween } from "./multi-select";
 import { cardLabel, dbg, dragDebugAfterDrop, listLabel, nextRenderId } from "./drag-debug"; // DRAGDEBUG
 import type WeekGridPlannerPlugin from "./main";
 import { BODY_ICON_ID } from "./main";
@@ -98,6 +99,12 @@ export class WeekGridView extends BasesView {
 	private dropHandled = false;
 	/** Reused across drags — a dashed "landing zone" box shown at wherever the dragged card would land if dropped right now. */
 	private placeholderEl: HTMLElement | null = null;
+	/** Cards selected with Ctrl/Cmd+click or Shift+click. Only ever holds cards that are on the board (see pruneSelection). */
+	private selectedPaths = new Set<string>();
+	/** Where a Shift+click range starts: the card last clicked with Ctrl/Cmd (or the first Shift+click). */
+	private selectionAnchor: string | null = null;
+	/** What the current drag is carrying, in board order: the grabbed card plus the rest of the selection if it was part of it. Empty when nothing is being dragged. */
+	private draggedPaths: string[] = [];
 
 	constructor(
 		controller: QueryController,
@@ -114,6 +121,14 @@ export class WeekGridView extends BasesView {
 		this.buildHeader();
 		this.columnsEl = this.rootEl.createDiv("wgp-columns");
 		this.somedayEl = this.rootEl.createDiv("wgp-someday");
+
+		// Esc, or a click anywhere on the board that isn't on a card, clears the selection.
+		this.registerDomEvent(document, "keydown", (ev) => {
+			if (ev.key === "Escape" && this.selectedPaths.size > 0 && this.draggedPath === null) this.clearSelection();
+		});
+		this.registerDomEvent(this.rootEl, "click", (ev) => {
+			if (!(ev.target instanceof Element) || !ev.target.closest(".wgp-card")) this.clearSelection();
+		});
 	}
 
 	/** The YAML key currently configured for a canonical field (e.g. "date" -> "wgp_date"). */
@@ -346,7 +361,7 @@ export class WeekGridView extends BasesView {
 		}
 	}
 
-	/** How many *other* (non-dragged) cards in `listEl` sit before wherever the placeholder currently is — the index to pass to moveTaskToDate()/moveToSomedayAtPosition(). Falls back to "append at the end" if no live preview happened in this list (e.g. an unusually fast drag straight to drop). */
+	/** How many *other* (non-dragged) cards in `listEl` sit before wherever the placeholder currently is — the index to pass to moveTasksToDate()/moveTasksToSomeday(). Falls back to "append at the end" if no live preview happened in this list (e.g. an unusually fast drag straight to drop). */
 	private placeholderIndexAmongCards(listEl: HTMLElement): number {
 		if (!this.placeholderEl || this.placeholderEl.parentElement !== listEl) {
 			return listEl.querySelectorAll(":scope > .wgp-card").length;
@@ -417,6 +432,7 @@ export class WeekGridView extends BasesView {
 
 		this.renderColumns(columns.map((c) => this.sortByOrder(c)), weekDaysIso, todayIso);
 		this.renderSomeday(this.sortByOrder(someday));
+		this.pruneSelection();
 
 		if (firstRects) this.animateCardMoves(firstRects);
 		dbg("render end", { id: dbgId }); // DRAGDEBUG
@@ -499,15 +515,16 @@ export class WeekGridView extends BasesView {
 		});
 		columnEl.addEventListener("drop", (ev) => {
 			ev.preventDefault();
-			const path = this.draggedPath;
+			const paths = this.draggedPaths;
 			const targetIndex = this.placeholderIndexAmongCards(listEl);
-			dbg("drop", { list: listLabel(listEl), targetIndex, hasDraggedPath: !!path, placeholderInThisList: this.placeholderEl?.parentElement === listEl }); // DRAGDEBUG
-			if (!path) {
+			dbg("drop", { list: listLabel(listEl), targetIndex, count: paths.length, placeholderInThisList: this.placeholderEl?.parentElement === listEl }); // DRAGDEBUG
+			if (paths.length === 0) {
 				this.removePlaceholder();
 				return;
 			}
 			this.dropHandled = true;
 			dragDebugAfterDrop(this.rootEl, () => this.placeholderEl); // DRAGDEBUG
+			this.clearSelection();
 			this.skipAnimationUntil = Date.now() + 400;
 			// Deliberately NOT removing the placeholder or un-hiding the
 			// dragged card here. Two earlier attempts both caused visible
@@ -525,7 +542,7 @@ export class WeekGridView extends BasesView {
 			// replaces everything in one clean step, with nothing to
 			// revert or flash in between.
 			this.scheduleStuckRenderFallback();
-			void this.moveTaskToDate(path, isoDate, targetIndex, entries);
+			void this.moveTasksToDate(paths, isoDate, targetIndex, entries);
 		});
 	}
 
@@ -551,6 +568,7 @@ export class WeekGridView extends BasesView {
 
 		const cardEl = createDiv({ cls: "wgp-card" });
 		cardEl.setAttr("data-path", file.path);
+		if (this.selectedPaths.has(file.path)) cardEl.addClass("wgp-card-selected");
 		cardEl.addClass(`wgp-color-${this.plugin.settings.cardColorStyle}`);
 		if (fm[statusKey] === STATUS_DONE) cardEl.addClass("wgp-card-done");
 		if (fm[statusKey] === STATUS_CANCELLED) {
@@ -584,9 +602,14 @@ export class WeekGridView extends BasesView {
 		cardEl.addEventListener("dragstart", (ev) => {
 			ev.dataTransfer?.setData("text/plain", file.path);
 			this.draggedPath = file.path;
-			this.dragSeq++;
+			this.draggedPaths = this.pathsToDrag(file.path);
+			const thisDrag = ++this.dragSeq;
 			this.dropHandled = false;
-			dbg("dragstart", { card: cardLabel(cardEl), list: isoDate ?? "someday", index }); // DRAGDEBUG
+			// While several cards travel together the drag ghost carries a count badge. The browser
+			// snapshots the ghost right after this handler returns, so the attribute is set now and
+			// removed again one frame later.
+			if (this.draggedPaths.length > 1) cardEl.setAttr("data-drag-count", String(this.draggedPaths.length));
+			dbg("dragstart", { card: cardLabel(cardEl), list: isoDate ?? "someday", index, count: this.draggedPaths.length }); // DRAGDEBUG
 			// Deferred a frame: the browser captures its native drag-ghost
 			// image synchronously from the element's current appearance
 			// when dragstart fires — hiding it immediately here would make
@@ -594,8 +617,11 @@ export class WeekGridView extends BasesView {
 			// first, then frees up the card's layout space for the
 			// placeholder to occupy.
 			window.requestAnimationFrame(() => {
-				cardEl.style.display = "none";
-				dbg("original card hidden (rAF)", { card: cardLabel(cardEl) }); // DRAGDEBUG
+				cardEl.removeAttribute("data-drag-count");
+				// A very fast flick can be over before this frame: hiding the cards then would leave them stuck hidden.
+				if (this.draggedPath === null || this.dragSeq !== thisDrag) return;
+				this.setDraggedCardsHidden(true);
+				dbg("dragged card(s) hidden (rAF)", { card: cardLabel(cardEl), count: this.draggedPaths.length }); // DRAGDEBUG
 			});
 			ev.stopPropagation();
 		});
@@ -605,12 +631,13 @@ export class WeekGridView extends BasesView {
 			if (!this.dropHandled) {
 				// Genuinely cancelled (dropped outside any valid target,
 				// Escape, etc.) — nothing else will clean this up, so
-				// restore the card and remove the placeholder ourselves.
-				cardEl.style.display = "";
+				// restore the card(s) and remove the placeholder ourselves.
+				this.setDraggedCardsHidden(false);
 				this.removePlaceholder();
 			}
 			// A successful drop deliberately does NOT touch either here —
 			// see the drop handlers' comments for why.
+			this.draggedPaths = [];
 		});
 
 		const contentEl = cardEl.createSpan({ cls: "wgp-card-content" });
@@ -627,7 +654,23 @@ export class WeekGridView extends BasesView {
 		contentEl.createSpan({ text: title, cls: "wgp-card-text" });
 		contentEl.addEventListener("click", (ev) => {
 			ev.stopPropagation();
-			void this.app.workspace.openLinkText(file.path, "", Keymap.isModEvent(ev));
+			// Ctrl+click (Cmd+click on macOS) toggles a card in the selection; Shift+click selects a range.
+			if (ev.shiftKey || Keymap.isModifier(ev, "Mod")) {
+				this.selectWithGesture(ev, cardEl, file.path);
+				return;
+			}
+			this.clearSelection();
+			void this.app.workspace.openLinkText(file.path, "", false);
+		});
+		// Ctrl/Cmd+click no longer opens a new tab (it selects), so the middle button does that instead.
+		contentEl.addEventListener("mousedown", (ev) => {
+			if (ev.button === 1) ev.preventDefault(); // no autoscroll cursor
+		});
+		contentEl.addEventListener("auxclick", (ev) => {
+			if (ev.button !== 1) return;
+			ev.preventDefault();
+			ev.stopPropagation();
+			void this.app.workspace.openLinkText(file.path, "", "tab");
 		});
 
 		const moveBtn = cardEl.createEl("button", { cls: "wgp-card-move clickable-icon", text: "⋮" });
@@ -668,17 +711,17 @@ export class WeekGridView extends BasesView {
 
 	/**
 	 * Reassigns sequential `order` (0, 1, 2…) to the whole list, with the
-	 * `insertedPath` file placed at index `targetPosition`. Used after a
-	 * drag-and-drop reorder within the same day/Someday.
+	 * `insertedPaths` files (one card, or the whole selection) placed together,
+	 * in the order given, at index `targetPosition`. Used after a drag-and-drop
+	 * onto a day/Someday.
 	 */
-	private async reorderList(originalList: BasesEntry[], insertedPath: string, targetPosition: number) {
+	private async reorderList(originalList: BasesEntry[], insertedPaths: string[], targetPosition: number) {
 		const orderKey = this.key("order");
-		const withoutDragged = originalList.filter((e) => e.file.path !== insertedPath);
-		const draggedFile = this.app.vault.getAbstractFileByPath(insertedPath);
-		if (!(draggedFile instanceof TFile)) return;
-
-		const paths = withoutDragged.map((e) => e.file.path);
-		paths.splice(targetPosition, 0, insertedPath);
+		const paths = insertPaths(
+			originalList.map((e) => e.file.path),
+			insertedPaths,
+			targetPosition,
+		);
 
 		for (let i = 0; i < paths.length; i++) {
 			const file = this.app.vault.getAbstractFileByPath(paths[i]);
@@ -895,16 +938,21 @@ export class WeekGridView extends BasesView {
 		dbg("write: date done"); // DRAGDEBUG
 
 		if (destinationList) {
-			await this.reorderList(destinationList, path, position);
+			await this.reorderList(destinationList, [path], position);
 		} else {
 			await this.app.fileManager.processFrontMatter(file, (fm: Frontmatter) => {
 				fm[orderKey] = position;
 			});
 		}
 
+		await this.renameToMatchDate(file, newIsoDate);
+	}
+
+	/** Renames a task note to "<title> — <date>.md" for its new date; skipped if that name is already taken. */
+	private async renameToMatchDate(file: TFile, isoDate: string) {
 		const title = extractTitle(file.basename);
 		const folder = file.parent?.path ?? this.plugin.settings.tasksFolder;
-		const newPath = `${folder}/${title} — ${newIsoDate}.md`;
+		const newPath = `${folder}/${title} — ${isoDate}.md`;
 		if (newPath !== file.path && !this.app.vault.getAbstractFileByPath(newPath)) {
 			dbg("rename begin", { to: newPath }); // DRAGDEBUG
 			await this.app.fileManager.renameFile(file, newPath);
@@ -912,16 +960,123 @@ export class WeekGridView extends BasesView {
 		}
 	}
 
-	private async moveToSomedayAtPosition(path: string, list: BasesEntry[], position: number) {
-		const file = this.app.vault.getAbstractFileByPath(path);
-		if (!(file instanceof TFile)) return;
+	/**
+	 * Drop of one or several cards onto a day: sets every note's date, writes the
+	 * destination list's new order once (the moved cards together, at `position`),
+	 * and only then renames the files — so the whole move is one batch of writes
+	 * and the board re-renders once at the end.
+	 */
+	private async moveTasksToDate(paths: string[], newIsoDate: string, position: number, destinationList: BasesEntry[]) {
+		const files = this.filesForPaths(paths);
+		if (files.length === 0) return;
 		const dateKey = this.key("date");
-		dbg("write: date removal begin", { card: file.basename, position }); // DRAGDEBUG
-		await this.app.fileManager.processFrontMatter(file, (fm: Frontmatter) => {
-			delete fm[dateKey];
-		});
+
+		dbg("write: date begin", { cards: files.map((f) => f.basename), newIsoDate, position }); // DRAGDEBUG
+		for (const file of files) {
+			await this.app.fileManager.processFrontMatter(file, (fm: Frontmatter) => {
+				fm[dateKey] = newIsoDate;
+			});
+		}
+		dbg("write: date done"); // DRAGDEBUG
+
+		await this.reorderList(destinationList, files.map((f) => f.path), position);
+
+		for (const file of files) {
+			await this.renameToMatchDate(file, newIsoDate);
+		}
+	}
+
+	/** The notes behind these paths (anything that no longer exists is skipped). */
+	private filesForPaths(paths: string[]): TFile[] {
+		return paths
+			.map((path) => this.app.vault.getAbstractFileByPath(path))
+			.filter((file): file is TFile => file instanceof TFile);
+	}
+
+	/** Drop of one or several cards onto Someday: removes every note's date, then writes Someday's new order once. */
+	private async moveTasksToSomeday(paths: string[], list: BasesEntry[], position: number) {
+		const files = this.filesForPaths(paths);
+		if (files.length === 0) return;
+		const dateKey = this.key("date");
+
+		dbg("write: date removal begin", { cards: files.map((f) => f.basename), position }); // DRAGDEBUG
+		for (const file of files) {
+			await this.app.fileManager.processFrontMatter(file, (fm: Frontmatter) => {
+				delete fm[dateKey];
+			});
+		}
 		dbg("write: date removal done"); // DRAGDEBUG
-		await this.reorderList(list, path, position);
+
+		await this.reorderList(list, files.map((f) => f.path), position);
+	}
+
+	// ── Multi-select ────────────────────────────────────────────────────────
+
+	/** Applies a Ctrl/Cmd+click (toggle one card) or Shift+click (add the range from the anchor, within the same list). */
+	private selectWithGesture(ev: MouseEvent, cardEl: HTMLElement, path: string) {
+		if (ev.shiftKey) {
+			const listPaths = Array.from(cardEl.parentElement?.querySelectorAll<HTMLElement>(":scope > .wgp-card") ?? []).map(
+				(el) => el.getAttribute("data-path") ?? "",
+			);
+			for (const rangePath of rangeBetween(listPaths, this.selectionAnchor, path)) this.selectedPaths.add(rangePath);
+			// Like a file manager, Shift keeps the anchor where it was — unless there was none to extend from.
+			if (this.selectionAnchor === null || !listPaths.includes(this.selectionAnchor)) this.selectionAnchor = path;
+		} else {
+			if (this.selectedPaths.has(path)) this.selectedPaths.delete(path);
+			else this.selectedPaths.add(path);
+			this.selectionAnchor = path;
+		}
+		this.applySelectionClasses();
+	}
+
+	private clearSelection() {
+		this.selectionAnchor = null;
+		if (this.selectedPaths.size === 0) return;
+		this.selectedPaths.clear();
+		this.applySelectionClasses();
+	}
+
+	/** Mirrors `selectedPaths` onto the cards already on screen. */
+	private applySelectionClasses() {
+		this.rootEl.querySelectorAll<HTMLElement>(".wgp-card[data-path]").forEach((el) => {
+			el.toggleClass("wgp-card-selected", this.selectedPaths.has(el.getAttribute("data-path") ?? ""));
+		});
+	}
+
+	/** Keeps the selection limited to cards that are actually on the board — another week, or a note that's gone, drops out of it. */
+	private pruneSelection() {
+		if (this.selectedPaths.size === 0) return;
+		const onBoard = new Set(
+			Array.from(this.rootEl.querySelectorAll<HTMLElement>(".wgp-card[data-path]")).map((el) => el.getAttribute("data-path") ?? ""),
+		);
+		for (const path of Array.from(this.selectedPaths)) {
+			if (!onBoard.has(path)) this.selectedPaths.delete(path);
+		}
+		if (this.selectionAnchor !== null && !onBoard.has(this.selectionAnchor)) this.selectionAnchor = null;
+	}
+
+	/**
+	 * What a drag that starts on `grabbedPath` carries: the whole selection (in
+	 * board order — columns left to right, then Someday) if the grabbed card is
+	 * part of a multi-card selection, otherwise just that card. Grabbing a card
+	 * that isn't selected drops the selection, so it never moves along with it.
+	 */
+	private pathsToDrag(grabbedPath: string): string[] {
+		if (!this.selectedPaths.has(grabbedPath) || this.selectedPaths.size < 2) {
+			this.clearSelection();
+			return [grabbedPath];
+		}
+		return Array.from(this.rootEl.querySelectorAll<HTMLElement>(".wgp-card[data-path]"))
+			.map((el) => el.getAttribute("data-path") ?? "")
+			.filter((path) => this.selectedPaths.has(path));
+	}
+
+	/** Hides (display: none, as the single-card drag always did) or restores every card the current drag carries. */
+	private setDraggedCardsHidden(hidden: boolean) {
+		const dragged = new Set(this.draggedPaths);
+		this.rootEl.querySelectorAll<HTMLElement>(".wgp-card[data-path]").forEach((el) => {
+			if (dragged.has(el.getAttribute("data-path") ?? "")) el.style.display = hidden ? "none" : "";
+		});
 	}
 
 	private renderSomeday(entries: BasesEntry[]) {
@@ -958,22 +1113,23 @@ export class WeekGridView extends BasesView {
 		});
 		listEl.addEventListener("drop", (ev) => {
 			ev.preventDefault();
-			const path = this.draggedPath;
+			const paths = this.draggedPaths;
 			const targetIndex = this.placeholderIndexAmongCards(listEl);
-			dbg("drop", { list: listLabel(listEl), targetIndex, hasDraggedPath: !!path, placeholderInThisList: this.placeholderEl?.parentElement === listEl }); // DRAGDEBUG
-			if (!path) {
+			dbg("drop", { list: listLabel(listEl), targetIndex, count: paths.length, placeholderInThisList: this.placeholderEl?.parentElement === listEl }); // DRAGDEBUG
+			if (paths.length === 0) {
 				this.removePlaceholder();
 				return;
 			}
 			this.dropHandled = true;
 			dragDebugAfterDrop(this.rootEl, () => this.placeholderEl); // DRAGDEBUG
+			this.clearSelection();
 			this.skipAnimationUntil = Date.now() + 400;
 			// See the identical comment in renderColumn()'s drop handler —
 			// deliberately leaves the placeholder and hidden original card
 			// untouched until Obsidian's own reactivity replaces everything
 			// in one clean step.
 			this.scheduleStuckRenderFallback();
-			void this.moveToSomedayAtPosition(path, entries, targetIndex);
+			void this.moveTasksToSomeday(paths, entries, targetIndex);
 		});
 	}
 }

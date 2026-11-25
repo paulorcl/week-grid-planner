@@ -2,6 +2,15 @@
 
 Todas as mudanças notáveis do Week Grid Planner são registradas aqui.
 
+## [0.3.30]
+### Added
+- **Multi-select.** Ctrl+click (Cmd+click on macOS) toggles a card in the selection and Shift+click adds the range from the last clicked card within the same list; selected cards get an outline. Dragging any selected card moves all of them: they are all lifted out together (the drag image shows a count badge) and land together at the placeholder, in their current board order (day first, then position), whichever days they came from. Dragging a card that is not selected moves only that card. Esc, or a click on empty board space, clears the selection, and the selection only ever holds cards that are on screen (changing week or a note disappearing drops it). A multi-card drop is written as one batch — all dates, one reorder of the destination list, then the file renames — so the board re-renders once
+### Changed
+- Ctrl/Cmd+click on a card no longer opens the note in a new tab (it selects); **middle-click** opens it in a new tab instead. The Ctrl+Alt split/window variants of that click are gone with it. A plain click still opens the note
+### Fixed
+- `master_id` is now written to generated occurrences as a quoted string. Unquoted, values that YAML reads as something else (`007123`, `1e5`, `true`, `null`, `a: b`, `a #b`, `[x]`) came back as a number, boolean, null, a truncated string or broken YAML, so an occurrence could stop matching its master. Existing masters and occurrences are untouched, and a quoted and an unquoted value read back identically for ordinary IDs
+- A very fast drag that was cancelled before the next animation frame could leave its card hidden; the card is now only hidden while the drag is still going
+
 ## [0.3.29]
 ### Fixed
 - Fast drag-and-drop sometimes did nothing: the card snapped back to where it was. The drag log showed that in quick drags (about 50-100 ms from pick-up to release) the browser delivered **no `drop` event at all**, even though the pointer was released inside the list (10 of 11 quick drags in one capture; slower drags were fine). Day columns and the Someday list now also accept the drag on `dragenter`, not only on `dragover`, as the HTML drag-and-drop model expects. Likely cause: when the pointer crosses into a new element, `dragenter` fires first and `dragover` only on the next update, so releasing in between counted as "drop not allowed"

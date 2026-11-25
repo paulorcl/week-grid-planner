@@ -166,6 +166,8 @@
 	   .wgp-card-move/.wgp-card-complete). */
 	min-height: 38px;
 	padding: 4px 6px;
+	/* Shift+click selects cards; without this it would also select the text between them. */
+	user-select: none;
 }
 
 /*
@@ -443,3 +445,30 @@
 	width: 14px;
 }
 
+/* Multi-select (Ctrl/Cmd+click, Shift+click) */
+.wgp-card-selected {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+/* Count badge on the drag ghost while several cards are dragged together (set for one frame by dragstart). */
+.wgp-card[data-drag-count] {
+	position: relative;
+}
+
+.wgp-card[data-drag-count]::after {
+	align-items: center;
+	background: var(--interactive-accent);
+	border-radius: 10px;
+	color: var(--text-on-accent);
+	content: attr(data-drag-count);
+	display: flex;
+	font-size: var(--font-ui-smaller);
+	height: 20px;
+	justify-content: center;
+	min-width: 20px;
+	padding: 0 6px;
+	position: absolute;
+	right: 4px;
+	top: 4px;
+}
